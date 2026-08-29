@@ -1,0 +1,12 @@
+target/
+.git/
+.gitignore
+.idea/
+*.iml
+*.log
+*.docx
+frontend-react/node_modules/
+frontend-react/dist/
+.DS_Store
+Thumbs.db
+

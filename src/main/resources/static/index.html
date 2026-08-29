@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARP Network Monitoring & Defense SOC</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+          },
+          colors: {
+            cyber: {
+              50: '#F0F9FF',
+              100: '#E0F2FE',
+              500: '#0EA5E9',
+              600: '#0284C7',
+              700: '#0369A1',
+              900: '#0B0F19',
+              950: '#06090F'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- React 18 & Babel CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #0A0E17;
+      --card-bg: rgba(16, 23, 38, 0.9);
+      --card-border: rgba(51, 65, 85, 0.6);
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+    }
+    .light {
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --card-border: #CBD5E1;
+      --text: #0F172A;
+      --text-muted: #334155;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow-x: hidden;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 0.875rem;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s ease;
+    }
+    .light .glass-card {
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+    }
+    .glass-card:hover {
+      border-color: rgba(14, 165, 233, 0.5);
+    }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .light ::-webkit-scrollbar-thumb { background: #94A3B8; }
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+      50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.85); }
+    }
+    .glow-poison { animation: pulse-red 1.8s infinite ease-in-out; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+  <div id="root"></div>
+
+  <!-- React 18 SOC Dashboard -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function App() {
+      const [isDark, setIsDark] = useState(false); // Default to clean light theme
+      const [soundEnabled, setSoundEnabled] = useState(true);
+      const [nodes, setNodes] = useState([]);
+      const [metrics, setMetrics] = useState({ total_packets: 0, anomalies_detected: 0, threat_level: 'NORMAL', current_threat_score: 0, arp_requests: 0, arp_replies: 0, gratuitous_arp: 0 });
+      const [packets, setPackets] = useState([]);
+      const [alerts, setAlerts] = useState([]);
+      const [selectedNode, setSelectedNode] = useState(null);
+      const [activeTab, setActiveTab] = useState('live_packets'); // 'live_packets' | 'alerts' | 'scripts' | 'theory'
+      const [isConnected, setIsConnected] = useState(false);
+      const [autoDefense, setAutoDefense] = useState(false);
+      const [scripts, setScripts] = useState({});
+      const [hoveredNode, setHoveredNode] = useState(null);
+      const [flyingPackets, setFlyingPackets] = useState([]);
+      const [ripples, setRipples] = useState([]);
+
+      const canvasRef = useRef(null);
+      const audioCtxRef = useRef(null);
+
+      // Dark / Light Mode Class
+      useEffect(() => {
+        if (isDark) document.documentElement.classList.remove('light');
+        else document.documentElement.classList.add('light');
+      }, [isDark]);
+
+      // Web Audio Synthesizer
+      const playTone = (type = 'alert') => {
+        if (!soundEnabled) return;
+        try {
+          if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+          const osc = audioCtxRef.current.createOscillator();
+          const gain = audioCtxRef.current.createGain();
+          if (type === 'alert') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(820, audioCtxRef.current.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(320, audioCtxRef.current.currentTime + 0.22);
+            gain.gain.setValueAtTime(0.12, audioCtxRef.current.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtxRef.current.currentTime + 0.22);
+            osc.start(); osc.stop(audioCtxRef.current.currentTime + 0.22);
+          } else {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, audioCtxRef.current.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtxRef.current.currentTime + 0.18);
+            gain.gain.setValueAtTime(0.08, audioCtxRef.current.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtxRef.current.currentTime + 0.18);
+            osc.start(); osc.stop(audioCtxRef.current.currentTime + 0.18);
+          }
+          osc.connect(gain); gain.connect(audioCtxRef.current.destination);
+        } catch (e) {}
+      };
+
+      // Add flying packet animation
+      const addPacketAnimation = (senderIp, targetIp, isAnomalous, isHeal, curNodes) => {
+        const sNode = curNodes.find(n => n.ip === senderIp);
+        if (!sNode) return;
+        const width = 860;
+        const height = 460;
+        const from = { x: (sNode.x || 0.5) * width, y: (sNode.y || 0.5) * height };
+
+        let color = '#0284C7';
+        let size = 6;
+        if (isAnomalous) { color = '#DC2626'; size = 8; }
+        if (isHeal) { color = '#059669'; size = 7.5; }
+
+        const isBroadcast = !targetIp || targetIp === '0.0.0.0' || targetIp === '255.255.255.255' || targetIp === 'FF:FF:FF:FF:FF:FF';
+        const to = isBroadcast
+          ? { x: 0.5 * width, y: 0.48 * height }
+          : {
+              x: (curNodes.find(n => n.ip === targetIp)?.x || 0.5) * width,
+              y: (curNodes.find(n => n.ip === targetIp)?.y || 0.5) * height
+            };
+
+        setFlyingPackets(prev => [...prev.slice(-16), { from, to, progress: 0, color, size, isAnomalous, isHeal }]);
+      };
+
+      // Animation loop
+      useEffect(() => {
+        const timer = setInterval(() => {
+          setFlyingPackets(prev => {
+            const next = [];
+            prev.forEach(p => {
+              const prog = p.progress + 0.042;
+              if (prog >= 1.0) {
+                setRipples(r => [...r.slice(-10), { x: p.to.x, y: p.to.y, radius: 4, alpha: 0.85, color: p.color }]);
+              } else {
+                next.push({ ...p, progress: prog });
+              }
+            });
+            return next;
+          });
+          setRipples(r => r.map(rip => ({ ...rip, radius: rip.radius + 1.8, alpha: rip.alpha - 0.05 })).filter(rip => rip.alpha > 0));
+        }, 30);
+        return () => clearInterval(timer);
+      }, []);
+
+      // WebSocket Connection
+      useEffect(() => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/traffic`;
+        let reconnect;
+
+        const connect = () => {
+          const ws = new WebSocket(wsUrl);
+          ws.onopen = () => setIsConnected(true);
+          ws.onmessage = (e) => {
+            try {
+              const msg = JSON.parse(e.data);
+              if (msg.type === 'INITIAL_STATE' || msg.type === 'TOPOLOGY_UPDATE') {
+                if (msg.data?.nodes) {
+                  setNodes(msg.data.nodes);
+                  if (selectedNode) {
+                    const match = msg.data.nodes.find(n => n.id === selectedNode.id);
+                    if (match) setSelectedNode(match);
+                  }
+                }
+                if (msg.data?.metrics) {
+                  setMetrics(msg.data.metrics);
+                  setAutoDefense(msg.data.metrics.auto_defense_enabled || false);
+                }
+                if (msg.recent_packets) setPackets(msg.recent_packets);
+                if (msg.recent_alerts) setAlerts(msg.recent_alerts);
+                if (msg.new_alerts && msg.new_alerts.length > 0) {
+                  setAlerts(prev => [...msg.new_alerts, ...prev].slice(0, 100));
+                  playTone('alert');
+                }
+              } else if (msg.type === 'PACKET_STREAM') {
+                const p = msg.packet;
+                if (p) {
+                  const isHeal = p.id && p.id.startsWith('HEAL');
+                  setNodes(cur => {
+                    addPacketAnimation(p.sender_ip, p.target_ip, p.is_anomalous, isHeal, cur);
+                    return cur;
+                  });
+                  setPackets(prev => [p, ...prev].slice(0, 80));
+
+                  if (p.is_anomalous) playTone('alert');
+                  else if (isHeal) playTone('heal');
+                }
+                if (msg.alerts && msg.alerts.length > 0) {
+                  setAlerts(prev => [...msg.alerts, ...prev].slice(0, 100));
+                  playTone('alert');
+                }
+              } else if (msg.type === 'RESET') {
+                if (msg.data?.nodes) setNodes(msg.data.nodes);
+                setPackets([]);
+                setAlerts([]);
+              }
+            } catch (err) {}
+          };
+          ws.onclose = () => { setIsConnected(false); reconnect = setTimeout(connect, 2000); };
+          ws.onerror = () => setIsConnected(false);
+        };
+        connect();
+        return () => clearTimeout(reconnect);
+      }, [selectedNode, soundEnabled]);
+
+      const fetchInitial = async () => {
+        try {
+          const [topRes, scrRes] = await Promise.all([fetch('/api/topology'), fetch('/api/mitigation/scripts')]);
+          const topData = await topRes.json();
+          const scrData = await scrRes.json();
+          if (topData.nodes) setNodes(topData.nodes);
+          if (topData.metrics) {
+            setMetrics(topData.metrics);
+            setAutoDefense(topData.metrics.auto_defense_enabled || false);
+          }
+          setScripts(scrData);
+        } catch (e) {}
+      };
+
+      useEffect(() => { fetchInitial(); }, []);
+
+      // Custom Device Drawing
+      const drawRouter = (ctx, x, y, isDark) => {
+        // Antenna
+        ctx.strokeStyle = isDark ? '#38BDF8' : '#0284C7';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x - 12, y - 10); ctx.lineTo(x - 18, y - 28);
+        ctx.moveTo(x + 12, y - 10); ctx.lineTo(x + 18, y - 28);
+        ctx.stroke();
+
+        // Pulsing radio wave
+        const wave = (Date.now() / 30) % 18;
+        ctx.strokeStyle = isDark ? `rgba(56, 189, 248, ${1 - wave/18})` : `rgba(2, 132, 199, ${1 - wave/18})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x - 18, y - 28, wave, -Math.PI*0.8, -Math.PI*0.2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + 18, y - 28, wave, -Math.PI*0.8, -Math.PI*0.2); ctx.stroke();
+
+        // Antenna Tips
+        ctx.fillStyle = '#059669';
+        ctx.beginPath(); ctx.arc(x - 18, y - 28, 3.5, 0, Math.PI*2); ctx.arc(x + 18, y - 28, 3.5, 0, Math.PI*2); ctx.fill();
+
+        // Router Body
+        ctx.fillStyle = isDark ? '#1E293B' : '#FFFFFF';
+        ctx.strokeStyle = isDark ? '#38BDF8' : '#0284C7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - 28, y - 10, 56, 26, 6);
+        ctx.fill(); ctx.stroke();
+
+        // LEDs
+        ctx.fillStyle = '#059669';
+        ctx.beginPath();
+        ctx.arc(x - 14, y + 3, 2.5, 0, Math.PI*2);
+        ctx.arc(x - 4, y + 3, 2.5, 0, Math.PI*2);
+        ctx.arc(x + 6, y + 3, 2.5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = isDark ? '#38BDF8' : '#0284C7';
+        ctx.beginPath(); ctx.arc(x + 16, y + 3, 2.5, 0, Math.PI*2); ctx.fill();
+      };
+
+      const drawServer = (ctx, x, y, isDark) => {
+        // Tower Chassis
+        ctx.fillStyle = isDark ? '#1E293B' : '#FFFFFF';
+        ctx.strokeStyle = '#059669';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - 22, y - 28, 44, 56, 6);
+        ctx.fill(); ctx.stroke();
+
+        // Blades
+        for (let i = 0; i < 3; i++) {
+          const by = y - 22 + i * 16;
+          ctx.fillStyle = isDark ? '#0F172A' : '#F1F5F9';
+          ctx.beginPath(); ctx.roundRect(x - 17, by, 34, 12, 3); ctx.fill();
+          ctx.fillStyle = (Date.now() + i * 180) % 500 < 250 ? '#059669' : '#0284C7';
+          ctx.beginPath(); ctx.arc(x + 10, by + 6, 2.5, 0, Math.PI*2); ctx.fill();
+        }
+      };
+
+      const drawWorkstation = (ctx, x, y, isPoisoned, isDark) => {
+        // Monitor Stand
+        ctx.fillStyle = isDark ? '#475569' : '#64748B';
+        ctx.beginPath();
+        ctx.rect(x - 4, y + 10, 8, 8);
+        ctx.roundRect(x - 14, y + 18, 28, 4, 2);
+        ctx.fill();
+
+        // Monitor Bezel
+        ctx.fillStyle = isDark ? '#1E293B' : '#FFFFFF';
+        ctx.strokeStyle = isPoisoned ? '#DC2626' : (isDark ? '#475569' : '#94A3B8');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - 25, y - 20, 50, 32, 5);
+        ctx.fill(); ctx.stroke();
+
+        // Monitor Screen
+        ctx.fillStyle = isPoisoned ? '#991B1B' : (isDark ? '#0F172A' : '#F1F5F9');
+        ctx.beginPath();
+        ctx.roundRect(x - 21, y - 16, 42, 24, 3);
+        ctx.fill();
+
+        if (isPoisoned) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 9px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚠️ POISON', x, y);
+        } else {
+          ctx.fillStyle = '#059669';
+          ctx.beginPath(); ctx.arc(x, y - 4, 3, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = isDark ? '#38BDF8' : '#0369A1';
+          ctx.font = 'bold 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('HOST OK', x, y + 6);
+        }
+      };
+
+      const drawAttacker = (ctx, x, y, isDark) => {
+        // Hacker Laptop
+        ctx.fillStyle = isDark ? '#1E293B' : '#FFFFFF';
+        ctx.strokeStyle = '#9333EA';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - 22, y - 20, 44, 26, 4);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = isDark ? '#1E1B4B' : '#3B0764';
+        ctx.beginPath(); ctx.roundRect(x - 18, y - 17, 36, 20, 2); ctx.fill();
+
+        ctx.fillStyle = '#E9D5FF';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('💀', x, y - 3);
+
+        ctx.fillStyle = isDark ? '#312E81' : '#F3E8FF';
+        ctx.strokeStyle = '#9333EA';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.roundRect(x - 26, y + 6, 52, 8, 3); ctx.fill(); ctx.stroke();
+      };
+
+      // 60FPS Canvas Animation Loop
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let animId;
+
+        const render = () => {
+          const rect = canvas.getBoundingClientRect();
+          const width = rect.width;
+          const height = rect.height || 460;
+
+          if (canvas.width !== width * window.devicePixelRatio || canvas.height !== height * window.devicePixelRatio) {
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+          }
+
+          ctx.clearRect(0, 0, width, height);
+
+          // Grid
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
+          for (let y = 0; y < height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+
+          const swX = 0.5 * width;
+          const swY = 0.48 * height;
+
+          // Network Cables
+          nodes.forEach(node => {
+            const nx = (node.x || 0.5) * width;
+            const ny = (node.y || 0.5) * height;
+
+            ctx.beginPath();
+            ctx.moveTo(swX, swY);
+            ctx.lineTo(nx, ny);
+
+            if (node.status === 'COMPROMISED') {
+              ctx.strokeStyle = '#DC2626';
+              ctx.lineWidth = 2.5;
+              ctx.setLineDash([6, 4]);
+            } else if (node.role === 'attacker') {
+              ctx.strokeStyle = '#9333EA';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([]);
+            } else {
+              ctx.strokeStyle = isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(2, 132, 199, 0.4)';
+              ctx.lineWidth = 2;
+              ctx.setLineDash([]);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+          });
+
+          // Central Switch Box
+          ctx.fillStyle = isDark ? '#111827' : '#FFFFFF';
+          ctx.strokeStyle = isDark ? '#38BDF8' : '#0284C7';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(swX - 44, swY - 22, 88, 44, 8);
+          ctx.fill(); ctx.stroke();
+
+          ctx.fillStyle = isDark ? '#38BDF8' : '#0284C7';
+          ctx.font = 'bold 11px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('L2 SWITCH', swX, swY - 3);
+
+          // Switch Port LEDs
+          for (let i = 0; i < 5; i++) {
+            const ledX = swX - 26 + i * 13;
+            ctx.fillStyle = (Date.now() + i * 180) % 600 < 300 ? '#059669' : '#0284C7';
+            ctx.beginPath(); ctx.arc(ledX, swY + 11, 2.2, 0, Math.PI*2); ctx.fill();
+          }
+
+          // Ripples
+          ripples.forEach(rip => {
+            ctx.beginPath();
+            ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = rip.color;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = rip.alpha;
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          });
+
+          // Flying Packets
+          flyingPackets.forEach(p => {
+            const curX = p.from.x + (p.to.x - p.from.x) * p.progress;
+            const curY = p.from.y + (p.to.y - p.from.y) * p.progress;
+
+            const trailLen = 0.08;
+            const trailX = p.from.x + (p.to.x - p.from.x) * Math.max(0, p.progress - trailLen);
+            const trailY = p.from.y + (p.to.y - p.from.y) * Math.max(0, p.progress - trailLen);
+
+            const grad = ctx.createLinearGradient(trailX, trailY, curX, curY);
+            grad.addColorStop(0, 'rgba(0,0,0,0)');
+            grad.addColorStop(1, p.color);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = p.size;
+            ctx.beginPath(); ctx.moveTo(trailX, trailY); ctx.lineTo(curX, curY); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(curX, curY, p.size / 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          });
+
+          // Devices
+          nodes.forEach(node => {
+            const nx = (node.x || 0.5) * width;
+            const ny = (node.y || 0.5) * height;
+            const isSelected = selectedNode && selectedNode.id === node.id;
+            const isHovered = hoveredNode && hoveredNode.id === node.id;
+            const isComp = node.status === 'COMPROMISED';
+
+            // Selection Aura
+            if (isSelected || isHovered) {
+              ctx.strokeStyle = isSelected ? '#0284C7' : 'rgba(2, 132, 199, 0.4)';
+              ctx.lineWidth = isSelected ? 2.5 : 1.5;
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath(); ctx.arc(nx, ny, 44, 0, Math.PI * 2); ctx.stroke();
+              ctx.setLineDash([]);
+            }
+
+            if (isComp) {
+              const pulse = 42 + Math.sin(Date.now() / 180) * 6;
+              ctx.fillStyle = 'rgba(220, 38, 38, 0.25)';
+              ctx.beginPath(); ctx.arc(nx, ny, pulse, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Draw Physical Visual
+            if (node.role === 'gateway') drawRouter(ctx, nx, ny, isDark);
+            else if (node.role === 'server') drawServer(ctx, nx, ny, isDark);
+            else if (node.role === 'attacker') drawAttacker(ctx, nx, ny, isDark);
+            else drawWorkstation(ctx, nx, ny, isComp, isDark);
+
+            // Text Labels with High Contrast
+            ctx.font = 'bold 12px Inter, sans-serif';
+            ctx.fillStyle = isComp ? '#DC2626' : (isDark ? '#F8FAFC' : '#0F172A');
+            ctx.textAlign = 'center';
+            ctx.fillText(node.name, nx, ny + 38);
+
+            ctx.font = 'bold 10px monospace';
+            ctx.fillStyle = isDark ? '#94A3B8' : '#334155';
+            ctx.fillText(node.ip, nx, ny + 51);
+          });
+
+          animId = requestAnimationFrame(render);
+        };
+        render();
+        return () => cancelAnimationFrame(animId);
+      }, [nodes, selectedNode, hoveredNode, flyingPackets, ripples, isDark]);
+
+      const handleCanvasClick = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        for (const node of nodes) {
+          const nx = (node.x || 0.5) * rect.width;
+          const ny = (node.y || 0.5) * (rect.height || 460);
+          if (Math.hypot(mouseX - nx, mouseY - ny) <= 38) {
+            setSelectedNode(node);
+            return;
+          }
+        }
+      };
+
+      const handleCanvasMouseMove = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        let match = null;
+        for (const node of nodes) {
+          const nx = (node.x || 0.5) * rect.width;
+          const ny = (node.y || 0.5) * (rect.height || 460);
+          if (Math.hypot(mouseX - nx, mouseY - ny) <= 38) {
+            match = node;
+            break;
+          }
+        }
+        setHoveredNode(match);
+      };
+
+      // Actions
+      const launchAttack = async (type) => {
+        try {
+          await fetch('/api/attack/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attack_type: type, target_ip: '192.168.1.1', victim_ip: '192.168.1.101', spoofed_mac: 'AA:BB:CC:DD:EE:66', count: 12 })
+          });
+        } catch (e) {}
+      };
+
+      const broadcastHeal = async () => {
+        try { await fetch('/api/mitigation/heal', { method: 'POST' }); } catch (e) {}
+      };
+
+      const toggleAutoDefense = async (enabled) => {
+        setAutoDefense(enabled);
+        await fetch('/api/mitigation/auto-defense', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+      };
+
+      const toggleIsolation = async (mac, isolate) => {
+        const url = isolate ? '/api/mitigation/isolate' : '/api/mitigation/unisolate';
+        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mac }) });
+      };
+
+      const resetSim = async () => {
+        await fetch('/api/simulation/reset', { method: 'POST' });
+      };
+
+      const score = metrics?.current_threat_score || 0;
+      const level = metrics?.threat_level || 'NORMAL';
+      const isPoisoned = nodes.some(n => n.status === 'COMPROMISED');
+
+      return (
+        <div className="max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-4 flex-1">
+          {/* Top Global Bar */}
+          <header className="glass-card p-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-700 text-white flex items-center justify-center font-extrabold text-lg shadow-md shadow-sky-500/20">
+                🛡️
+              </div>
+              <div>
+                <h1 className="text-base font-extrabold tracking-wide flex items-center gap-2 text-slate-900 dark:text-white">
+                  ARP NETWORK MONITORING SYSTEM
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-mono font-bold dark:bg-sky-950 dark:text-sky-400 dark:border-sky-800">
+                    DAI & WATCHDOG SOC
+                  </span>
+                </h1>
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  Real-time Layer-2 Ethernet Frame Inspector • Abnormal ARP Mapping Detection
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Threat Pill */}
+              <div className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border ${
+                isPoisoned
+                  ? 'bg-red-100 text-red-900 border-red-300 glow-poison dark:bg-rose-950/60 dark:text-rose-400 dark:border-rose-800'
+                  : 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isPoisoned ? 'bg-red-600' : 'bg-emerald-600'}`} />
+                <span>THREAT: {level} ({score}%)</span>
+              </div>
+
+              {/* Auto Defense Toggle */}
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-100 dark:bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-800 hover:border-slate-400">
+                <input
+                  type="checkbox"
+                  checked={autoDefense}
+                  onChange={(e) => toggleAutoDefense(e.target.checked)}
+                  className="rounded text-sky-600 focus:ring-0"
+                />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-300">Auto-Mitigate</span>
+              </label>
+
+              {/* Broadcast Heal */}
+              <button
+                onClick={broadcastHeal}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition-all flex items-center gap-1.5"
+              >
+                🛡️ Broadcast Heal
+              </button>
+
+              {/* Reset */}
+              <button
+                onClick={resetSim}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                🔄 Reset
+              </button>
+
+              {/* Sound Toggle */}
+              <button
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className="p-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                title="Toggle Audio"
+              >
+                {soundEnabled ? '🔊' : '🔇'}
+              </button>
+
+              {/* Theme Toggle */}
+              <button
+                onClick={() => setIsDark(!isDark)}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              >
+                {isDark ? '☀️ Light' : '🌙 Dark'}
+              </button>
+            </div>
+          </header>
+
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="glass-card p-3 flex flex-col justify-between">
+              <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 tracking-wider">TOTAL PACKETS ANALYZED</span>
+              <span className="text-2xl font-extrabold font-mono text-sky-700 dark:text-sky-400 mt-1">{metrics?.total_packets || 0}</span>
+            </div>
+            <div className="glass-card p-3 flex flex-col justify-between">
+              <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 tracking-wider">ANOMALIES CAUGHT</span>
+              <span className="text-2xl font-extrabold font-mono text-rose-700 dark:text-rose-400 mt-1">{metrics?.anomalies_detected || 0}</span>
+            </div>
+            <div className="glass-card p-3 flex flex-col justify-between">
+              <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 tracking-wider">ARP REQUESTS / REPLIES</span>
+              <span className="text-base font-extrabold font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+                {metrics?.arp_requests || 0} / {metrics?.arp_replies || 0}
+              </span>
+            </div>
+            <div className="glass-card p-3 flex flex-col justify-between">
+              <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-400 tracking-wider">GRATUITOUS ARP (GARP)</span>
+              <span className="text-2xl font-extrabold font-mono text-amber-700 dark:text-amber-400 mt-1">{metrics?.gratuitous_arp || 0}</span>
+            </div>
+          </div>
+
+          {/* Attack Control Bar */}
+          <div className="glass-card p-3 flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-gradient-to-r dark:from-red-950/20 dark:via-slate-900/40 dark:to-slate-900/40">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-extrabold text-slate-800 dark:text-slate-300 mr-2 flex items-center gap-1.5">
+                <span>⚡</span> Launch Vulnerability Simulation:
+              </span>
+              <button
+                onClick={() => launchAttack('mitm')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <span>💀</span> MITM Poisoning
+              </button>
+              <button
+                onClick={() => launchAttack('gateway_hijack')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <span>📻</span> Gateway Spoof
+              </button>
+              <button
+                onClick={() => launchAttack('garp_storm')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <span>🌪️</span> GARP Storm
+              </button>
+              <button
+                onClick={() => launchAttack('flip_flop')}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all flex items-center gap-1.5"
+              >
+                <span>🔁</span> MAC Flip-Flop
+              </button>
+            </div>
+          </div>
+
+          {/* Center Visualizer & Device Details (2 Columns) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Visual Canvas (8 Cols) */}
+            <div className="lg:col-span-8 glass-card p-3 flex flex-col min-h-[490px]">
+              <div className="flex items-center justify-between text-xs mb-2 px-2">
+                <span className="font-bold flex items-center gap-2 text-slate-900 dark:text-slate-200">
+                  <span className="w-2 h-2 rounded-full bg-sky-600 animate-ping"></span> Live 60FPS Network Packet Stream
+                </span>
+                <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-sky-600"></span> Request</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-600"></span> Reply</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-600"></span> Rogue Poison</span>
+                </div>
+              </div>
+
+              <canvas
+                ref={canvasRef}
+                onClick={handleCanvasClick}
+                onMouseMove={handleCanvasMouseMove}
+                className="w-full flex-1 rounded-xl border border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-950/90 cursor-pointer shadow-sm"
+                style={{ minHeight: '430px' }}
+              />
+
+              <div className="mt-2 text-[11px] text-slate-600 dark:text-slate-400 font-medium text-center flex items-center justify-between px-2">
+                <span>Click any computer, router, or server to inspect its live ARP cache and hardware bindings.</span>
+                <span className="text-sky-700 dark:text-sky-400 font-mono font-bold">192.168.1.0/24 Subnet</span>
+              </div>
+            </div>
+
+            {/* Right Drawer: Selected Node Details (4 Cols) */}
+            <div className="lg:col-span-4 flex flex-col gap-3">
+              {/* Selected Node Card */}
+              <div className="glass-card p-4 flex-1 flex flex-col min-h-[220px]">
+                {selectedNode ? (
+                  <div>
+                    <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-200 dark:border-slate-800">
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          {selectedNode.role === 'gateway' ? '🌐' : (selectedNode.role === 'server' ? '🖧' : (selectedNode.role === 'attacker' ? '💀' : '💻'))}
+                          {selectedNode.name}
+                        </h3>
+                        <div className="text-xs font-mono text-slate-700 dark:text-slate-400 mt-0.5 font-medium">
+                          IP: <strong className="text-slate-900 dark:text-slate-200">{selectedNode.ip}</strong> • MAC: <strong className="text-sky-700 dark:text-sky-400">{selectedNode.mac}</strong>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${selectedNode.status === 'COMPROMISED' ? 'bg-red-100 text-red-900 border-red-300 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-800' : 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800'}`}>
+                        {selectedNode.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono mb-3 p-2 bg-slate-100 dark:bg-slate-950 rounded border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-300">
+                      <div>OS: <span className="font-semibold">{selectedNode.os}</span></div>
+                      <div>Quarantine: <span className={selectedNode.is_isolated ? 'text-red-700 dark:text-rose-400 font-bold' : 'text-emerald-700 dark:text-emerald-400 font-bold'}>{selectedNode.is_isolated ? 'ISOLATED' : 'ACTIVE'}</span></div>
+                      <div>TX: <span className="text-sky-700 dark:text-sky-400 font-bold">{selectedNode.packets_sent || 0}</span> pkts</div>
+                      <div>RX: <span className="text-emerald-700 dark:text-emerald-400 font-bold">{selectedNode.packets_received || 0}</span> pkts</div>
+                    </div>
+
+                    {selectedNode.role === 'attacker' && (
+                      <button
+                        onClick={() => toggleIsolation(selectedNode.mac, !selectedNode.is_isolated)}
+                        className={`w-full mb-3 py-1.5 rounded text-xs font-bold ${selectedNode.is_isolated ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-600 hover:bg-red-500 text-white'}`}
+                      >
+                        {selectedNode.is_isolated ? '🔓 Restore Attacker Port Link' : '🔒 Quarantine Attacker Switch Port'}
+                      </button>
+                    )}
+
+                    <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-400 mb-2">
+                      Internal ARP Table Cache ({selectedNode.arp_cache?.length || 0} Entries)
+                    </h4>
+                    <div className="max-h-48 overflow-y-auto">
+                      <table className="w-full text-xs font-mono">
+                        <thead>
+                          <tr className="text-slate-700 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800 text-left font-bold">
+                            <th className="pb-1">Target IP</th>
+                            <th className="pb-1">Resolved MAC</th>
+                            <th className="pb-1">State</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-semibold">
+                          {selectedNode.arp_cache && selectedNode.arp_cache.length > 0 ? selectedNode.arp_cache.map((entry, idx) => (
+                            <tr key={idx} className={entry.is_poisoned ? 'text-red-700 font-bold bg-red-50 dark:text-rose-400 dark:bg-rose-950/40' : 'text-slate-800 dark:text-slate-300'}>
+                              <td className="py-1.5">{entry.ip}</td>
+                              <td className="py-1.5">{entry.mac} {entry.is_poisoned ? '🚨' : ''}</td>
+                              <td className="py-1.5">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${entry.is_poisoned ? 'bg-red-200 text-red-900 dark:bg-rose-900 dark:text-rose-200' : 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-400'}`}>
+                                  {entry.state}
+                                </span>
+                              </td>
+                            </tr>
+                          )) : <tr><td colSpan="3" className="py-3 text-center text-slate-500 italic">Cache empty</td></tr>}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-600 dark:text-slate-500 text-xs flex-1 flex flex-col items-center justify-center py-10">
+                    <span className="text-3xl mb-2">👆</span>
+                    <p className="font-bold text-slate-800 dark:text-slate-300 text-sm">Click on any device node in the canvas</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">To view its live hardware NIC specs and internal ARP resolution matrix.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Interactive SOC Tabs: Packets, Alerts, Defense Commands, Theory */}
+          <div className="glass-card p-4">
+            {/* Tab Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800 mb-3">
+              <div className="flex gap-2">
+                {[
+                  { id: 'live_packets', label: '🔍 Wireshark-Lite Packet Feed', count: packets.length },
+                  { id: 'alerts', label: '🚨 Security Incident Log', count: alerts.length },
+                  { id: 'scripts', label: '📜 Static Binding Defense Scripts' },
+                  { id: 'theory', label: '🎓 RFC 826 Theory & Viva Prep' }
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                      activeTab === t.id
+                        ? 'bg-sky-600 text-white shadow-sm'
+                        : 'text-slate-700 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <span>{t.label}</span>
+                    {t.count !== undefined && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-200 text-slate-800 dark:bg-slate-900 dark:text-slate-300 font-mono">
+                        {t.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TAB 1: LIVE PACKETS */}
+            {activeTab === 'live_packets' && (
+              <div className="max-h-60 overflow-y-auto">
+                <table className="w-full text-left font-mono text-xs">
+                  <thead className="sticky top-0 bg-slate-100 text-slate-800 border-b border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-800 font-bold">
+                    <tr>
+                      <th className="py-2 px-3">Time</th>
+                      <th className="py-2 px-3">Packet ID</th>
+                      <th className="py-2 px-3">Opcode</th>
+                      <th className="py-2 px-3">Sender (SPA / SHA)</th>
+                      <th className="py-2 px-3">Target (TPA)</th>
+                      <th className="py-2 px-3">Inspection Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
+                    {packets.map(p => (
+                      <tr key={p.id} className={`hover:bg-slate-100 dark:hover:bg-slate-800/50 ${p.is_anomalous ? 'bg-red-50 text-red-900 font-bold border-l-4 border-red-600 dark:bg-rose-950/30 dark:text-rose-300' : 'text-slate-800 dark:text-slate-300'}`}>
+                        <td className="py-1.5 px-3 text-slate-600 dark:text-slate-500">{p.time_str}</td>
+                        <td className="py-1.5 px-3 font-bold">{p.id}</td>
+                        <td className="py-1.5 px-3">
+                          {p.opcode === 1 ? (
+                            <span className="px-1.5 py-0.5 rounded bg-sky-100 text-sky-900 border border-sky-300 font-bold text-[10px] dark:bg-sky-950 dark:text-sky-400 dark:border-sky-800">REQ</span>
+                          ) : p.is_gratuitous ? (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[10px] dark:bg-amber-950 dark:text-amber-400 dark:border-amber-800">GARP</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[10px] dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-800">REP</span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-sky-700 dark:text-sky-400 font-bold">{p.sender_ip} <span className="text-slate-500 text-[10px] font-normal">({p.sender_mac})</span></td>
+                        <td className="py-1.5 px-3 text-slate-800 dark:text-slate-300">{p.target_ip}</td>
+                        <td className="py-1.5 px-3">
+                          {p.is_anomalous ? <span className="text-red-700 dark:text-rose-400 font-bold">⚠️ ANOMALY DETECTED</span> : <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Normal</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* TAB 2: ALERTS */}
+            {activeTab === 'alerts' && (
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {alerts.length === 0 ? (
+                  <div className="text-center py-10 text-slate-600 dark:text-slate-500 text-xs font-semibold">No active anomalies logged. Network operating normally.</div>
+                ) : alerts.map(a => (
+                  <div key={a.id} className="p-3 rounded-lg border border-red-300 bg-red-50 text-slate-800 dark:border-rose-800/80 dark:bg-rose-950/30 dark:text-slate-300 text-xs">
+                    <div className="flex items-center justify-between font-bold text-red-900 dark:text-rose-400 mb-1">
+                      <span className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold">{a.severity}</span>
+                        {a.attack_type}
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-600 dark:text-slate-500">{a.time_str}</span>
+                    </div>
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium">{a.description}</p>
+                    <div className="mt-1.5 text-[11px] text-sky-800 dark:text-sky-400 font-bold">
+                      <strong>Recommended Fix:</strong> {a.mitigation_suggested || 'Quarantine MAC and verify Static Bindings.'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TAB 3: SCRIPTS */}
+            {activeTab === 'scripts' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-slate-100 border border-slate-300 dark:bg-slate-950 dark:border-slate-800">
+                  <span className="font-bold text-slate-900 dark:text-slate-300 block mb-1">Windows 10 / 11 (netsh)</span>
+                  <pre className="font-mono text-[10px] text-emerald-800 dark:text-emerald-400 overflow-x-auto max-h-32 font-bold">{scripts.windows || 'Loading...'}</pre>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-100 border border-slate-300 dark:bg-slate-950 dark:border-slate-800">
+                  <span className="font-bold text-slate-900 dark:text-slate-300 block mb-1">Linux / Ubuntu (ip neigh)</span>
+                  <pre className="font-mono text-[10px] text-emerald-800 dark:text-emerald-400 overflow-x-auto max-h-32 font-bold">{scripts.linux || 'Loading...'}</pre>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-100 border border-slate-300 dark:bg-slate-950 dark:border-slate-800">
+                  <span className="font-bold text-slate-900 dark:text-slate-300 block mb-1">Cisco Switch (DAI)</span>
+                  <pre className="font-mono text-[10px] text-emerald-800 dark:text-emerald-400 overflow-x-auto max-h-32 font-bold">{scripts.cisco || 'Loading...'}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: THEORY */}
+            {activeTab === 'theory' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs leading-relaxed text-slate-800 dark:text-slate-300 font-medium">
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-300 dark:bg-slate-950 dark:border-slate-800 space-y-1">
+                  <h4 className="font-bold text-sky-800 dark:text-sky-400 text-sm">RFC 826 Protocol Mechanics</h4>
+                  <p>ARP resolves Layer-3 IPv4 addresses into Layer-2 Ethernet MAC addresses. When Host A wants to communicate with Host B, it broadcasts an ARP Request ("Who has IP 192.168.1.101?"). Host B unicasts an ARP Reply with its physical MAC.</p>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-300 dark:bg-slate-950 dark:border-slate-800 space-y-1">
+                  <h4 className="font-bold text-red-800 dark:text-rose-400 text-sm">Stateless Vulnerability & Mitigation</h4>
+                  <p>Standard ARP is completely unauthenticated. Nodes accept unsolicited replies, allowing attackers to overwrite ARP tables and conduct MITM eavesdropping. This project uses <strong>Dynamic ARP Inspection (DAI)</strong> and <strong>Authoritative Gratuitous ARP healing</strong> to cure poison states.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

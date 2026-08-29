@@ -1,0 +1,160 @@
+/* Cyber SOC Theme Variables & Base Styles */
+:root {
+    --bg-main: #0B0F19;
+    --bg-card: #111827;
+    --bg-card-hover: #1F2937;
+    --border-color: rgba(55, 65, 81, 0.6);
+    --border-glow: rgba(59, 130, 246, 0.4);
+    
+    --primary: #3B82F6;
+    --primary-glow: rgba(59, 130, 246, 0.3);
+    --success: #10B981;
+    --success-glow: rgba(16, 185, 129, 0.3);
+    --warning: #F59E0B;
+    --warning-glow: rgba(245, 158, 11, 0.3);
+    --danger: #EF4444;
+    --danger-glow: rgba(239, 68, 68, 0.3);
+    --purple: #8B5CF6;
+    --purple-glow: rgba(139, 92, 246, 0.3);
+    --cyan: #06B6D4;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: #E2E8F0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: #0D1322;
+}
+::-webkit-scrollbar-thumb {
+    background: #25334D;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #3B82F6;
+}
+
+/* Glassmorphism Card */
+.cyber-card {
+    background: rgba(17, 24, 39, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    border-radius: 0.75rem;
+    transition: all 0.2s ease-in-out;
+}
+.cyber-card:hover {
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Glowing Neon Elements */
+.glow-green {
+    box-shadow: 0 0 15px var(--success-glow);
+}
+.glow-red {
+    box-shadow: 0 0 20px var(--danger-glow);
+    animation: pulse-red 2s infinite;
+}
+.glow-cyan {
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+}
+
+@keyframes pulse-red {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(239, 68, 68, 0.8);
+    }
+}
+
+@keyframes pulse-dot {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.3); opacity: 0.7; }
+}
+
+.live-pulse {
+    animation: pulse-dot 1.5s infinite;
+}
+
+/* Monospace Packet Inspector */
+.font-mono-code {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Table Hover & Highlight */
+.packet-row-anomalous {
+    background-color: rgba(239, 68, 68, 0.12) !important;
+    border-left: 3px solid #EF4444 !important;
+}
+.packet-row-anomalous:hover {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.packet-row-heal {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    border-left: 3px solid #10B981 !important;
+}
+
+.cache-row-poisoned {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+    color: #FCA5A5 !important;
+    font-weight: 600;
+}
+
+/* Badge Tags */
+.tag-badge {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    letter-spacing: 0.025em;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Tab Active State */
+.nav-tab.active {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.1));
+    border-color: #3B82F6;
+    color: #60A5FA;
+}
+
+/* Canvas Topology Container */
+#topologyCanvas {
+    background: radial-gradient(circle at 50% 50%, #131E33 0%, #0B0F19 85%);
+    border-radius: 0.75rem;
+    cursor: crosshair;
+}
+
+/* Threat Score Meter */
+.threat-meter-fill {
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s ease;
+}
+
+/* Print/PDF Export Styling */
+@media print {
+    body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+    }
+    .no-print {
+        display: none !important;
+    }
+    .cyber-card {
+        background: #ffffff !important;
+        border: 1px solid #cccccc !important;
+        color: #000000 !important;
+        box-shadow: none !important;
+    }
+}
+

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARP Network Monitoring & Anomaly Detection System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            900: '#0B0F19',
+                            800: '#111827',
+                            700: '#1F2937',
+                            600: '#374151'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Custom Cyber SOC Styles -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+
+    <!-- Top SOC Header -->
+    <header class="cyber-card m-3 p-3.5 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <i data-lucide="shield-alert" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-extrabold tracking-wide text-white flex items-center gap-2">
+                    ARP NETWORK MONITORING SYSTEM
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700 font-mono">L2 SECURITY SOC</span>
+                </h1>
+                <p class="text-xs text-slate-400">Computer Networks Mini Project • Detect Abnormal Changes in Simulated ARP Mappings</p>
+            </div>
+        </div>
+
+        <!-- Threat Level & Live Controls -->
+        <div class="flex flex-wrap items-center gap-4">
+            <!-- Threat Gauge -->
+            <div class="flex items-center gap-3 bg-slate-900 px-3.5 py-1.5 rounded-lg border border-slate-800">
+                <div class="text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Threat Score</div>
+                    <div class="text-xs font-mono font-bold text-white flex items-center justify-end gap-1.5">
+                        <span id="threatScoreVal">0/100</span>
+                        <span id="threatLevelBadge" class="tag-badge bg-emerald-950 text-emerald-400 border border-emerald-800">NORMAL</span>
+                    </div>
+                </div>
+                <div class="w-24 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="threatScoreBar" class="threat-meter-fill h-full bg-emerald-500" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Auto-Defense Switch -->
+            <label class="flex items-center gap-2 cursor-pointer bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700">
+                <input type="checkbox" id="autoDefenseCheckbox" class="rounded border-slate-700 text-blue-600 focus:ring-0">
+                <span class="text-xs font-semibold text-slate-300">Auto-Mitigate</span>
+            </label>
+
+            <!-- Quick Action Buttons -->
+            <div class="flex items-center gap-2">
+                <button id="btnManualHeal" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-colors shadow-lg shadow-emerald-900/20">
+                    <i data-lucide="shield-check" class="w-4 h-4"></i>
+                    Broadcast Heal
+                </button>
+                <button id="btnResetSimulation" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    Reset
+                </button>
+                <button id="btnSoundToggle" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700" title="Toggle Sound">
+                    <i data-lucide="volume-2" class="w-4 h-4 text-emerald-400"></i>
+                </button>
+                <div id="wsStatusBadge" class="tag-badge bg-emerald-950 text-emerald-400 border border-emerald-800">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span> CONNECTED
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Top Navigation Tabs -->
+    <nav class="mx-3 mb-3 flex flex-wrap gap-1.5 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+        <button data-tab="overview" class="nav-tab active px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="activity" class="w-4 h-4"></i> SOC Topology
+        </button>
+        <button data-tab="cache" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="table-2" class="w-4 h-4"></i> ARP Cache Matrix
+        </button>
+        <button data-tab="attack" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="zap" class="w-4 h-4 text-red-400"></i> Attack Simulator
+        </button>
+        <button data-tab="packets" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="search" class="w-4 h-4"></i> Wireshark-Lite Analyzer
+        </button>
+        <button data-tab="alerts" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="bell" class="w-4 h-4 text-amber-400"></i> Security Alerts
+        </button>
+        <button data-tab="defense" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="lock" class="w-4 h-4 text-emerald-400"></i> Defense & Mitigation
+        </button>
+        <button data-tab="analytics" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Analytics & Reports
+        </button>
+        <button data-tab="theory" class="nav-tab px-3.5 py-2 rounded-md text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 border border-transparent transition-all">
+            <i data-lucide="book-open" class="w-4 h-4 text-sky-400"></i> Theory & Viva Prep
+        </button>
+    </nav>
+
+    <!-- Main Dynamic Content Container -->
+    <main class="flex-1 px-3 pb-4 overflow-y-auto">
+
+        <!-- TAB 1: SOC OVERVIEW & TOPOLOGY -->
+        <div id="tab-overview" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <!-- Left 2 Cols: Canvas Topology -->
+            <div class="lg:col-span-2 flex flex-col gap-3">
+                <div class="cyber-card p-3 border border-slate-800 flex-1 relative flex flex-col min-h-[520px]">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i>
+                            <h3 class="font-bold text-sm text-slate-200">Interactive Virtual Subnet Topology</h3>
+                            <span class="text-[11px] text-slate-400 font-mono">192.168.1.0/24</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs">
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Healthy</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-red-400 live-pulse"></span> Poisoned</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span> Attacker</span>
+                            <span class="flex items-center gap-1 text-slate-300"><span class="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Isolated</span>
+                        </div>
+                    </div>
+                    <canvas id="topologyCanvas" class="w-full flex-1 rounded-lg border border-slate-800/80"></canvas>
+                    <div class="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Tip: Click on any node circle to inspect its live ARP cache and interface statistics.</span>
+                        <span class="font-mono text-cyan-400">Packet Speed: 1.0x Realtime</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right 1 Col: Mini SOC Status & Node Inspector -->
+            <div class="flex flex-col gap-3">
+                <!-- Mini Stats Card -->
+                <div class="cyber-card p-3.5 border border-slate-800 grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 text-[10px] block">TOTAL ARP FRAMES</span>
+                        <span id="statTotalPackets" class="text-base font-bold font-mono text-cyan-400">0</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 text-[10px] block">ANOMALIES CAUGHT</span>
+                        <span id="statAnomalies" class="text-base font-bold font-mono text-red-400">0</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 text-[10px] block">ARP REQUESTS</span>
+                        <span id="statRequests" class="text-base font-bold font-mono text-sky-300">0</span>
+                    </div>
+                    <div class="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-400 text-[10px] block">ARP REPLIES</span>
+                        <span id="statReplies" class="text-base font-bold font-mono text-emerald-400">0</span>
+                    </div>
+                </div>
+
+                <!-- Selected Node Detail Drawer -->
+                <div id="nodeDetailDrawer" class="flex-1 flex flex-col">
+                    <div class="cyber-card p-4 border border-slate-800 text-center text-slate-500 text-xs flex-1 flex flex-col items-center justify-center">
+                        <i data-lucide="mouse-pointer-click" class="w-8 h-8 text-slate-600 mb-2"></i>
+                        <p>Click on any network node in the topology map to inspect its real-time ARP cache and hardware bindings.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: ARP CACHE MATRIX -->
+        <div id="tab-cache" class="tab-content hidden space-y-3">
+            <div class="flex items-center justify-between bg-slate-900 p-3 rounded-lg border border-slate-800">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-200">Synchronized ARP Cache Table Inspector</h3>
+                    <p class="text-xs text-slate-400">Real-time Layer-2 Address Resolution tables maintained inside each individual virtual node's operating system.</p>
+                </div>
+                <button onclick="window.app.fetchInitialData()" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
+                </button>
+            </div>
+            <div id="arpCacheMatrixContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- TAB 3: ATTACK SIMULATOR STUDIO -->
+        <div id="tab-attack" class="tab-content hidden grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <!-- Attack Scenarios (2 Cols) -->
+            <div class="lg:col-span-2 space-y-3">
+                <div class="cyber-card p-4 border border-slate-800">
+                    <h3 class="font-bold text-sm text-red-400 flex items-center gap-2 mb-1">
+                        <i data-lucide="flame" class="w-4 h-4"></i> Pre-Configured ARP Attack Scenarios
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-4">Launch standard and sophisticated ARP vulnerabilities against the virtual subnet to test detection algorithms.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <!-- Attack Card 1: MITM -->
+                        <div class="p-3.5 rounded-lg bg-slate-900 border border-red-900/40 hover:border-red-600 transition-all flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <h4 class="font-bold text-xs text-red-300 flex items-center gap-1.5">
+                                        <i data-lucide="split" class="w-4 h-4 text-red-400"></i> Man-In-The-Middle (MITM) Poisoning
+                                    </h4>
+                                    <span class="tag-badge bg-red-950 text-red-400 border border-red-800">CRITICAL</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+                                    Poisons Host A (<span class="font-mono text-slate-300">192.168.1.101</span>) and Default Gateway (<span class="font-mono text-slate-300">192.168.1.1</span>) simultaneously, directing all bidirectional subnet traffic through the attacker.
+                                </p>
+                            </div>
+                            <button data-attack="mitm" class="btn-launch-attack w-full py-1.5 rounded text-xs font-bold bg-red-700 hover:bg-red-600 text-white flex items-center justify-center gap-1.5">
+                                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Launch MITM Attack
+                            </button>
+                        </div>
+
+                        <!-- Attack Card 2: Gateway Hijack -->
+                        <div class="p-3.5 rounded-lg bg-slate-900 border border-red-900/40 hover:border-red-600 transition-all flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <h4 class="font-bold text-xs text-red-300 flex items-center gap-1.5">
+                                        <i data-lucide="radio" class="w-4 h-4 text-amber-400"></i> Default Gateway Impersonation
+                                    </h4>
+                                    <span class="tag-badge bg-red-950 text-red-400 border border-red-800">CRITICAL</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+                                    Broadcasts fake Gratuitous ARP declaring the Gateway IP <span class="font-mono text-slate-300">192.168.1.1</span> belongs to the Attacker MAC address.
+                                </p>
+                            </div>
+                            <button data-attack="gateway_hijack" class="btn-launch-attack w-full py-1.5 rounded text-xs font-bold bg-red-700 hover:bg-red-600 text-white flex items-center justify-center gap-1.5">
+                                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Launch Gateway Hijack
+                            </button>
+                        </div>
+
+                        <!-- Attack Card 3: GARP Flood -->
+                        <div class="p-3.5 rounded-lg bg-slate-900 border border-amber-900/40 hover:border-amber-600 transition-all flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <h4 class="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                                        <i data-lucide="wind" class="w-4 h-4 text-amber-400"></i> Gratuitous ARP (GARP) Storm
+                                    </h4>
+                                    <span class="tag-badge bg-amber-950 text-amber-400 border border-amber-800">HIGH</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+                                    Rapid burst of Gratuitous ARP packets with randomized sender IPs to overflow CAM tables and trigger rate-anomaly alarms.
+                                </p>
+                            </div>
+                            <button data-attack="garp_storm" class="btn-launch-attack w-full py-1.5 rounded text-xs font-bold bg-amber-700 hover:bg-amber-600 text-white flex items-center justify-center gap-1.5">
+                                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Launch GARP Storm (12 Pkts)
+                            </button>
+                        </div>
+
+                        <!-- Attack Card 4: Flip Flop -->
+                        <div class="p-3.5 rounded-lg bg-slate-900 border border-purple-900/40 hover:border-purple-600 transition-all flex flex-col justify-between">
+                            <div>
+                                <div class="flex items-center justify-between mb-1.5">
+                                    <h4 class="font-bold text-xs text-purple-300 flex items-center gap-1.5">
+                                        <i data-lucide="repeat" class="w-4 h-4 text-purple-400"></i> High-Frequency MAC Flip-Flop
+                                    </h4>
+                                    <span class="tag-badge bg-purple-950 text-purple-400 border border-purple-800">HIGH</span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 leading-relaxed mb-3">
+                                    Rapidly alternates genuine Gateway MAC and rogue MAC for the same IP, simulating a race-condition attack.
+                                </p>
+                            </div>
+                            <button data-attack="flip_flop" class="btn-launch-attack w-full py-1.5 rounded text-xs font-bold bg-purple-700 hover:bg-purple-600 text-white flex items-center justify-center gap-1.5">
+                                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Launch Flip-Flop Flapping
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Packet Crafter (1 Col) -->
+            <div class="space-y-3">
+                <div class="cyber-card p-4 border border-slate-800">
+                    <h3 class="font-bold text-sm text-cyan-400 flex items-center gap-2 mb-1">
+                        <i data-lucide="terminal" class="w-4 h-4"></i> Custom ARP Packet Builder
+                    </h3>
+                    <p class="text-xs text-slate-400 mb-3">Craft and inject raw custom ARP frames to test edge-case protocol validation.</p>
+
+                    <form id="customPacketForm" class="space-y-2.5 text-xs font-mono">
+                        <div>
+                            <label class="text-slate-400 block mb-1">ARP Opcode</label>
+                            <select id="customOpcode" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+                                <option value="2">2 - ARP Reply (Unicast / Gratuitous)</option>
+                                <option value="1">1 - ARP Request (Who-has Broadcast)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">Sender IP (SPA)</label>
+                            <input id="customSenderIp" type="text" value="192.168.1.1" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">Sender MAC (SHA)</label>
+                            <input id="customSenderMac" type="text" value="AA:BB:CC:DD:EE:66" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">Target IP (TPA)</label>
+                            <input id="customTargetIp" type="text" value="192.168.1.101" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+                        </div>
+                        <div>
+                            <label class="text-slate-400 block mb-1">Target MAC (THA)</label>
+                            <input id="customTargetMac" type="text" value="00:1A:2B:3C:4D:A1" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200">
+                        </div>
+                        <button type="submit" class="w-full mt-3 py-2 rounded text-xs font-bold bg-cyan-700 hover:bg-cyan-600 text-white flex items-center justify-center gap-1.5">
+                            <i data-lucide="send" class="w-3.5 h-3.5"></i> Inject Packet Into Subnet
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: WIRESHARK-LITE ANALYZER -->
+        <div id="tab-packets" class="tab-content hidden space-y-3">
+            <div class="cyber-card p-3 border border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="layers" class="w-5 h-5 text-sky-400"></i>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-200">Wireshark-Lite Live Packet Stream</h3>
+                        <p class="text-xs text-slate-400">Deep packet inspection for all Layer-2 Ethernet and ARP frame headers.</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btnPauseStream" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1">
+                        <i data-lucide="pause" class="w-3.5 h-3.5 text-amber-400"></i> Pause Stream
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stream Table -->
+            <div class="cyber-card border border-slate-800 overflow-hidden">
+                <div class="max-h-[560px] overflow-y-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-900 text-slate-400 text-xs font-mono sticky top-0 border-b border-slate-800">
+                            <tr>
+                                <th class="py-2.5 px-3">Time</th>
+                                <th class="py-2.5 px-3">Packet ID</th>
+                                <th class="py-2.5 px-3">Opcode</th>
+                                <th class="py-2.5 px-3">Sender (SPA / SHA)</th>
+                                <th class="py-2.5 px-3">Target (TPA)</th>
+                                <th class="py-2.5 px-3">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packetStreamTableBody" class="divide-y divide-slate-800/60">
+                            <!-- Populated dynamically via WS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: SECURITY ALERTS -->
+        <div id="tab-alerts" class="tab-content hidden space-y-3">
+            <div class="cyber-card p-3 border border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="shield-alert" class="w-5 h-5 text-red-400"></i>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-200">Security Anomaly & Incident Log</h3>
+                        <p class="text-xs text-slate-400">Real-time alert notifications triggered by DAI baseline violations, rate spikes, and churn detectors.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="alertsFeedContainer" class="space-y-2.5 max-h-[580px] overflow-y-auto pr-1">
+                <div class="text-center py-12 text-slate-500 text-sm">
+                    <i data-lucide="shield-check" class="inline-block w-8 h-8 text-emerald-500/50 mb-2"></i>
+                    <p>No active anomalies detected. Network operating normally.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 6: DEFENSE & MITIGATION -->
+        <div id="tab-defense" class="tab-content hidden grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <!-- Port Quarantine Table -->
+            <div class="cyber-card p-4 border border-slate-800 space-y-3">
+                <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                        <h3 class="font-bold text-sm text-emerald-400 flex items-center gap-1.5">
+                            <i data-lucide="shield" class="w-4 h-4"></i> Switch Port Security & Quarantine
+                        </h3>
+                        <p class="text-xs text-slate-400">Isolate offending Layer-2 MAC addresses on the virtual switch.</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="text-xs text-slate-400 font-mono border-b border-slate-800">
+                            <tr>
+                                <th class="py-2 px-3">Node</th>
+                                <th class="py-2 px-3">IP Address</th>
+                                <th class="py-2 px-3">MAC</th>
+                                <th class="py-2 px-3">State</th>
+                                <th class="py-2 px-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="isolationTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Static Binding Scripts Exporter -->
+            <div class="cyber-card p-4 border border-slate-800 space-y-3">
+                <div class="pb-2 border-b border-slate-800">
+                    <h3 class="font-bold text-sm text-sky-400 flex items-center gap-1.5">
+                        <i data-lucide="file-code" class="w-4 h-4"></i> Static ARP Binding Deployment Scripts
+                    </h3>
+                    <p class="text-xs text-slate-400">Lock down IP-to-MAC associations permanently on host operating systems to neutralize ARP spoofing.</p>
+                </div>
+
+                <!-- Windows -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-bold text-slate-300">Windows 10 / 11 (netsh commands)</span>
+                        <button onclick="window.app.copyScript('scriptWindowsCode')" class="text-[11px] text-sky-400 hover:underline">Copy</button>
+                    </div>
+                    <pre id="scriptWindowsCode" class="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-32">Loading...</pre>
+                </div>
+
+                <!-- Linux -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-bold text-slate-300">Linux / Ubuntu (ip neigh commands)</span>
+                        <button onclick="window.app.copyScript('scriptLinuxCode')" class="text-[11px] text-sky-400 hover:underline">Copy</button>
+                    </div>
+                    <pre id="scriptLinuxCode" class="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-32">Loading...</pre>
+                </div>
+
+                <!-- Cisco IOS -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-bold text-slate-300">Cisco Switch IOS (Dynamic ARP Inspection)</span>
+                        <button onclick="window.app.copyScript('scriptCiscoCode')" class="text-[11px] text-sky-400 hover:underline">Copy</button>
+                    </div>
+                    <pre id="scriptCiscoCode" class="p-2.5 bg-slate-950 rounded border border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-32">Loading...</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 7: ANALYTICS & FORENSICS HUB -->
+        <div id="tab-analytics" class="tab-content hidden space-y-3">
+            <div class="cyber-card p-3 border border-slate-800 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-200">Network Forensics & Incident Audit Hub</h3>
+                    <p class="text-xs text-slate-400">Statistical breakdown and exportable forensic summaries for presentation and evaluation.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="ReportExporter.printReport()" class="px-3 py-1.5 rounded text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5">
+                        <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print / PDF Report
+                    </button>
+                    <button onclick="ReportExporter.downloadJsonReport()" class="px-3 py-1.5 rounded text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> Export JSON
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <!-- Line Chart: Throughput (2 Cols) -->
+                <div class="lg:col-span-2 cyber-card p-4 border border-slate-800 h-72 flex flex-col">
+                    <h4 class="font-bold text-xs text-slate-300 mb-2">Real-Time Protocol Throughput (Packets / Second)</h4>
+                    <div class="flex-1 relative">
+                        <canvas id="trafficThroughputChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Doughnut Chart: Attack Distribution (1 Col) -->
+                <div class="cyber-card p-4 border border-slate-800 h-72 flex flex-col">
+                    <h4 class="font-bold text-xs text-slate-300 mb-2">Detected Threat Distribution</h4>
+                    <div class="flex-1 relative">
+                        <canvas id="attackDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 8: THEORY & VIVA PREPARATION GUIDE -->
+        <div id="tab-theory" class="tab-content hidden space-y-4 max-w-5xl mx-auto">
+            <div class="cyber-card p-5 border border-slate-800 space-y-3">
+                <h2 class="text-base font-extrabold text-white flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i data-lucide="graduation-cap" class="w-5 h-5 text-blue-400"></i>
+                    Computer Networks Mini Project Theory & RFC 826 Reference Guide
+                </h2>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-300 leading-relaxed">
+                    <div class="bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 space-y-2">
+                        <h3 class="font-bold text-sm text-cyan-400">1. Address Resolution Protocol (ARP - RFC 826)</h3>
+                        <p>ARP bridges the Network Layer (Layer 3 - IPv4) and Data Link Layer (Layer 2 - Ethernet). In an IPv4 Ethernet network, nodes communicate using MAC addresses. When Host A wants to transmit an IP packet to Host B on the same LAN, it broadcasts an <strong>ARP Request</strong>: <em>"Who has IP 192.168.1.102? Tell 192.168.1.101"</em>. Host B unicasts an <strong>ARP Reply</strong> with its MAC address.</p>
+                    </div>
+
+                    <div class="bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 space-y-2">
+                        <h3 class="font-bold text-sm text-red-400">2. The Fundamental Security Vulnerability (Stateless Trust)</h3>
+                        <p>ARP is completely stateless and lacks authentication. Operating systems accept unsolicited ARP replies without verifying if a request was ever sent, and overwrite their ARP cache unconditionally. An attacker can broadcast forged ARP replies to associate the Default Gateway's IP with the attacker's MAC address, executing a <strong>Man-In-The-Middle (MITM)</strong> attack.</p>
+                    </div>
+                </div>
+
+                <!-- Detection Algorithms Summary -->
+                <div class="bg-slate-900/80 p-4 rounded-lg border border-slate-800 space-y-2 text-xs">
+                    <h3 class="font-bold text-sm text-emerald-400">3. Multi-Layer Anomaly Detection Algorithms Implemented</h3>
+                    <ul class="list-disc list-inside space-y-1 text-slate-300">
+                        <li><strong>Dynamic ARP Inspection (DAI) Baseline Verification:</strong> Compares claimed IP-MAC pairs in every incoming frame against a trusted DHCP Snooping / Static binding table. Mismatches trigger immediate alerts.</li>
+                        <li><strong>Critical Gateway Watchdog:</strong> Specialized high-priority monitoring for the Default Gateway and DNS servers. Immediate critical severity trigger if the Gateway MAC shifts.</li>
+                        <li><strong>Sliding-Window Rate / Flood Detector:</strong> Tracks packet frequency in a rolling 2-second window. Bursts exceeding 15 pps or >6 Gratuitous ARP pkts/sec trigger DoS storm alerts.</li>
+                        <li><strong>Flip-Flop Churn Detector:</strong> Maintains a history queue of recent MAC transitions per IP. Oscillating transitions (e.g. A &rarr; B &rarr; A within 5s) flag race-condition poisoning.</li>
+                        <li><strong>Malformed Frame & Bogon Checker:</strong> Identifies invalid sender MACs (00:00:00:00:00:00, FF:FF:FF:FF:FF:FF in unicast fields, or multicast addresses).</li>
+                    </ul>
+                </div>
+
+                <!-- High-Yield Viva Voce Q&A -->
+                <div class="space-y-3 pt-2">
+                    <h3 class="font-bold text-sm text-amber-400 flex items-center gap-2">
+                        <i data-lucide="help-circle" class="w-4 h-4"></i> High-Yield Viva Voce Questions & Model Answers
+                    </h3>
+
+                    <details class="bg-slate-900/90 p-3 rounded-lg border border-slate-800 cursor-pointer">
+                        <summary class="font-bold text-xs text-slate-200">Q1: What is Gratuitous ARP (GARP) and how is it abused?</summary>
+                        <p class="mt-2 text-xs text-slate-400 pl-2 border-l-2 border-amber-500">
+                            A Gratuitous ARP is an ARP Reply where the Sender IP equals the Target IP, sent as a broadcast. Legitimate uses include IP conflict detection and notifying the switch of a new NIC. Attackers abuse GARP to update the ARP caches of all hosts on the LAN in a single frame.
+                        </p>
+                    </details>
+
+                    <details class="bg-slate-900/90 p-3 rounded-lg border border-slate-800 cursor-pointer">
+                        <summary class="font-bold text-xs text-slate-200">Q2: How does Dynamic ARP Inspection (DAI) work on managed switches?</summary>
+                        <p class="mt-2 text-xs text-slate-400 pl-2 border-l-2 border-amber-500">
+                            DAI validates ARP packets on untrusted switch ports against the DHCP Snooping database. If the sender IP and MAC in the ARP payload do not match the authorized DHCP lease, the switch drops the packet and logs the violation.
+                        </p>
+                    </details>
+
+                    <details class="bg-slate-900/90 p-3 rounded-lg border border-slate-800 cursor-pointer">
+                        <summary class="font-bold text-xs text-slate-200">Q3: Why doesn't IPv6 use ARP?</summary>
+                        <p class="mt-2 text-xs text-slate-400 pl-2 border-l-2 border-amber-500">
+                            IPv6 replaces ARP with Neighbor Discovery Protocol (NDP) operating over ICMPv6. NDP uses multicast instead of broadcast, and supports Secure Neighbor Discovery (SEND - RFC 3971) with cryptographically generated addresses (CGA) to prevent spoofing.
+                        </p>
+                    </details>
+
+                    <details class="bg-slate-900/90 p-3 rounded-lg border border-slate-800 cursor-pointer">
+                        <summary class="font-bold text-xs text-slate-200">Q4: How does our application heal a poisoned ARP cache?</summary>
+                        <p class="mt-2 text-xs text-slate-400 pl-2 border-l-2 border-amber-500">
+                            Upon detecting an anomaly, the mitigation engine broadcasts an authoritative Gratuitous ARP packet carrying the genuine baseline MAC address for the victim IP. When host operating systems receive this authoritative frame, they immediately overwrite the rogue entry in their ARP table.
+                        </p>
+                    </details>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Deep Packet Inspector Modal -->
+    <div id="packetModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="cyber-card p-5 border border-sky-500/50 max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="binary" class="w-5 h-5 text-sky-400"></i>
+                    <h4 class="font-bold text-sm text-slate-100">Deep Packet Inspection & Field Breakdown</h4>
+                </div>
+                <button onclick="document.getElementById('packetModal').classList.add('hidden')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div id="packetModalContent" class="overflow-y-auto flex-1 pr-1">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Scripts -->
+    <script src="/static/js/topology.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/export_report.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+        // Recreate icons when tabs change
+        document.querySelectorAll('.nav-tab').forEach(b => {
+            b.addEventListener('click', () => setTimeout(() => lucide.createIcons(), 50));
+        });
+    </script>
+</body>
+</html>
+
