@@ -148,7 +148,7 @@ CN Project/
 
 ---
 
-## 🎓 8. High-Yield Viva Voce Interview Questions & Answers
+## 🎓 8. High-Yield Questions 
 
 ### Q1: What is Address Resolution Protocol (ARP) and why is it needed?
 **Answer:** ARP (RFC 826) maps a Layer-3 IPv4 address to a Layer-2 physical MAC address within a local broadcast domain. Ethernet frames require destination hardware MAC addresses for delivery across switches and network interfaces.
